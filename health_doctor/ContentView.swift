@@ -6,56 +6,62 @@
 //
 
 import SwiftUI
-import SwiftData
+import Charts
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @State private var stepsToday: Int = 0
+    @State private var caloriesToday: Int = 0
+    @State private var sleepHours: Double = 0
+    @State private var last7DaysSteps: [Health.DailyStepCount] = []
+    @State private var errorMessage: String?
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
+        ScrollView {
+            VStack(spacing: 12) {
+            Text("Steps today: \(stepsToday)")
+            Text("Active kcal today: \(caloriesToday)")
+            Text(String(format: "Sleep hours last night: %.1f", sleepHours))
+            if let errorMessage {
+                Text(errorMessage).foregroundColor(.red)
             }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
+                if !last7DaysSteps.isEmpty {
+                    Chart(last7DaysSteps) { item in
+                        BarMark(
+                            x: .value("Day", item.date, unit: .day),
+                            y: .value("Steps", item.count)
+                        )
+                        .foregroundStyle(.blue.gradient)
                     }
+                    .frame(height: 160)
+                    .padding(.vertical)
                 }
             }
-        } detail: {
-            Text("Select an item")
+        }
+        .padding()
+        .task {
+            await loadHealth()
         }
     }
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
+    private func loadHealth() async {
+        do {
+            try await Health.shared.requestAuthorisation()
+            async let steps = Health.shared.stepCountToday()
+            async let kcal = Health.shared.activeEnergyBurnedToday()
+            async let sleep = Health.shared.sleepHoursLastNight()
+            async let last7 = Health.shared.stepCountsLast7Days()
 
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
-            }
+            self.stepsToday = Int(try await steps)
+            self.caloriesToday = Int(try await kcal)
+            self.sleepHours = try await sleep
+            self.last7DaysSteps = try await last7
+        } catch {
+            self.errorMessage = error.localizedDescription
         }
     }
 }
 
 #Preview {
     ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
 }
+
