@@ -12,8 +12,17 @@ struct health_doctorApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-        }
+             TabView {
+                 ContentView()
+                     .tabItem {
+                         Label("Dashboard", systemImage: "chart.bar")
+                     }
+                 LLMDemoView()
+                     .tabItem {
+                         Label("LLM Demo", systemImage: "sparkle")
+                     }
+             }
+         }
         
     }
 }
